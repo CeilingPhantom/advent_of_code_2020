@@ -1,3 +1,5 @@
+from itertools import product
+
 class Grid3:
     # frames are reflective, i.e. frame at z=1 == frame at z=-1
     # so only have to store n frames rather than 2n-1 frames
@@ -403,19 +405,114 @@ class Grid4B:
                 string += str(["#" if self.get(x, y, z) else "." for x in range(self.min_x, self.max_x + 1)]) + "\n"
         return string
 
+class Grid4C:
+    nodes = {}  # (w, z, y, x): bool
+    updates = []
+
+    min_w = max_w = 0
+    min_z = max_z = 0
+    min_y = max_y = 0
+    min_x = max_x = 0
+
+    def __init__(self, lines):
+        self.max_y = len(lines)
+        self.max_x = len(lines[0])
+        for i in range(len(lines)):
+            for j in range(len(lines[0])):
+                self.nodes[(0, 0, i, j)] = lines[i][j] == "#"
+    
+    def get(self, coord):
+        try:
+            return self.nodes[coord]
+        except KeyError:
+            return False
+
+    def update(self):
+        self.expand()
+        w_range = range(self.min_w, self.max_w + 1)
+        z_range = range(self.min_z, self.max_z + 1)
+        y_range = range(self.min_y, self.max_y + 1)
+        x_range = range(self.min_x, self.max_x + 1)
+        for coord in product(w_range, z_range, y_range, x_range):
+            self.__update(coord)
+        self.push_updates()
+    
+    def __update(self, coord):
+        w, z, y, x = coord
+        w_range = range(w - 1, w + 2)
+        z_range = range(z - 1, z + 2)
+        y_range = range(y - 1, y + 2)
+        x_range = range(x - 1, x + 2)
+        n_active = 0
+        for other in product(w_range, z_range, y_range, x_range):
+            n_active += 1 * (coord != other and self.get(other))
+        if self.get(coord) and n_active not in range(2, 4) or \
+           not self.get(coord) and n_active == 3:
+            self.updates.append(coord)
+    
+    def expand(self):
+        """
+        self.min_w -= 1
+        self.max_w += 1
+        
+        self.min_z -= 1
+        self.max_z += 1
+
+        self.min_y -= 1
+        self.max_y += 1
+
+        self.min_x -= 1
+        self.max_x += 1
+        """
+
+        """
+        w_range = range(self.min_w, self.max_w + 1)
+        z_range = range(self.min_z, self.max_z + 1)
+        y_range = range(self.min_y, self.max_y + 1)
+        x_range = range(self.min_x, self.max_x + 1)
+        p = list(product(w_range, z_range, y_range, x_range))
+        """
+
+        # check if need to expand the range of an axis
+        def __expand(idx, min_val, max_val):
+            expand_min = expand_max = False
+            for coord in filter(lambda coord: coord[idx] == min_val or coord[idx] == max_val, self.nodes):
+                if self.get(coord):
+                    if not expand_min and coord[idx] == min_val:
+                        expand_min = True
+                    if not expand_max and coord[idx] == max_val:
+                        expand_max = True
+                if expand_min and expand_max:
+                    break
+            return (expand_min, expand_max)
+        
+        a, b = __expand(0, self.min_w, self.max_w)
+        self.min_w -= 1*a
+        self.max_w += 1*b
+
+        a, b = __expand(1, self.min_z, self.max_z)
+        self.min_z -= 1*a
+        self.max_z += 1*b
+
+        a, b = __expand(2, self.min_y, self.max_y)
+        self.min_y -= 1*a
+        self.max_y += 1*b
+
+        a, b = __expand(3, self.min_x, self.max_x)
+        self.min_x -= 1*a
+        self.max_x += 1*b
+
+    def push_updates(self):
+        for coord in self.updates:
+            self.nodes[coord] = not self.get(coord)
+        self.updates.clear()
+
 def b(lines):
-    g = Grid4B(lines)
+    g = Grid4C(lines)
     cycles = 6
     for i in range(cycles):
         g.update()
-    s = 0
-    for w in g.frames:
-        for z in g.frames[w]:
-            for y in g.frames[w][z]:
-                for x in g.frames[w][z][y]:
-                    if g.get(x, y, z, w):
-                        s += 1
-    return s
+    return sum(g.nodes.values())
 
 if __name__ == "__main__":
     with open("in", "r") as f:
