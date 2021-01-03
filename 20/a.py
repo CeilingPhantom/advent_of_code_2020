@@ -7,26 +7,30 @@ class Dir(Enum):
     Left = 2,
     Bot = 3
 
+class Match:
+    def __init__(self, id1, edge1, id2, edge2, is1reverse):
+        self.id1 = id1
+        self.edge1 = edge1
+        self.id2 = id2
+        self.edge2 = edge2
+        self.is1reverse = is1reverse
+    
+    def __str__(self):
+        return f"{self.id1}: {self.edge1} {self.is1reverse}, {self.id2} {self.edge2}"
+
 class Tile:
     size = 10
     state_combinations = list(product([False, True], [False, True], [0, 0.5, 1, 1.5]))
 
-    def __init__(self, id, right, top, left, bot, flipped_x=False, flipped_y=False, rotation=0):
+    def __init__(self, id, right, top, left, bot):
         self.id = id
         self.dirs = {}
         self.dirs[Dir.Right] = right
         self.dirs[Dir.Top] = top
         self.dirs[Dir.Left] = left
         self.dirs[Dir.Bot] = bot
-        self.flipped_x = flipped_x
-        self.flipped_y = flipped_y
-        self.rotation = rotation
 
-        self.cache = {}
-
-        # { (self state): { other id: { (other state): self edge that matches opposite edge in other [Dir.Right|Dir.Top|Dir.Left|Dir.Bot] } } }
-        # so ... [Dir.Right] would mean self right edge and other left edge match
-        self.edge_matches = {}
+        self.edge_matches = []
     
     @classmethod
     def from_lines(cls, lines):
@@ -43,92 +47,18 @@ class Tile:
         bot = list(lines[i])
         return cls(id, right, top, left, bot)
 
-    def get_state(self):
-        return (self.flipped_x, self.flipped_y, self.rotation)
-    
-    def set_state(self, state):
-        flipped_x, flipped_y, rotation = state
-        if state in self.cache:
-            self.flipped_x = flipped_x
-            self.flipped_y = flipped_y
-            self.rotation = rotation
-            self.dirs[Dir.Right] = self.cache[state][Dir.Right]
-            self.dirs[Dir.Top] = self.cache[state][Dir.Top]
-            self.dirs[Dir.Left] = self.cache[state][Dir.Left]
-            self.dirs[Dir.Bot] = self.cache[state][Dir.Bot]
-        else:
-            if self.flipped_x != flipped_x:
-                self.__flip_x()
-            if self.flipped_y != flipped_y:
-                self.__flip_y()
-            self.__rotate(rotation - self.rotation)
-            self.cache[state] = {}
-            self.cache[state][Dir.Right] = self.dirs[Dir.Right]
-            self.cache[state][Dir.Top] = self.dirs[Dir.Top]
-            self.cache[state][Dir.Left] = self.dirs[Dir.Left]
-            self.cache[state][Dir.Bot] = self.dirs[Dir.Bot]
-
-    # flip along x axis
-    def __flip_x(self):
-        self.flipped_x = not self.flipped_x
-        self.dirs[Dir.Top], self.dirs[Dir.Bot] = self.dirs[Dir.Bot], self.dirs[Dir.Top]
-        self.dirs[Dir.Left].reverse()
-        self.dirs[Dir.Right].reverse()
-    
-    # flip along y axis
-    def __flip_y(self):
-        self.flipped_y = not self.flipped_y
-        self.dirs[Dir.Left], self.dirs[Dir.Right] = self.dirs[Dir.Right], self.dirs[Dir.Left]
-        self.dirs[Dir.Top].reverse()
-        self.dirs[Dir.Bot].reverse()
-    
-    def __rotate_half_radian(self):
-        self.rotation += 0.5
-        self.rotation %= 2
-        tmp_top = self.dirs[Dir.Top]
-        tmp_left = self.dirs[Dir.Left]
-        tmp_right = self.dirs[Dir.Right]
-        tmp_bot = self.dirs[Dir.Bot]
-        self.dirs[Dir.Top] = tmp_right
-        self.dirs[Dir.Left] = tmp_top
-        self.dirs[Dir.Right] = tmp_bot
-        self.dirs[Dir.Bot] = tmp_left
-
-    def __rotate(self, radians):
-        radians %= 2
-        for _ in range(int(radians*2)):
-            self.__rotate_half_radian()
-
+    # check if an edge (reversed) is the same as an edge of another tile
     def edges_match(self, other):
-        self_state = self.get_state()
-        other_state = other.get_state()
-        if self_state not in self.edge_matches:
-            self.edge_matches[self_state] = {}
-        if other.id not in self.edge_matches[self_state]:
-            self.edge_matches[self_state][other.id] = {}
-        if other_state not in self.edge_matches[self_state][other.id]:
-            self.edge_matches[self_state][other.id][other_state] = []
-        # top touches bot
-        # left touches right
-        if self.dirs[Dir.Top] == other.dirs[Dir.Bot]:
-            self.edge_matches[self_state][other.id][other_state].append(Dir.Top)
-        if self.dirs[Dir.Bot] == other.dirs[Dir.Top]:
-            self.edge_matches[self_state][other.id][other_state].append(Dir.Bot)
-        if self.dirs[Dir.Right] == other.dirs[Dir.Left]:
-            self.edge_matches[self_state][other.id][other_state].append(Dir.Right)
-        if self.dirs[Dir.Left] == other.dirs[Dir.Right]:
-            self.edge_matches[self_state][other.id][other_state].append(Dir.Left)
-    
-    def n_edges_matched(self):
-        count = 0
-        for other_matches in self.edge_matches.values():
-            for other_states in other_matches.values():
-                for matching_edges in other_states.values():
-                    count += len(matching_edges)
-        return count
-
-    def __str__(self):
-        return f"id: {self.id}; r: {self.dirs[Dir.Right]}; t: {self.dirs[Dir.Top]}; l: {self.dirs[Dir.Left]}; b: {self.dirs[Dir.Bot]}"
+        for self_dir in Dir:
+            rvs = self.dirs[self_dir][:]
+            rvs.reverse()
+            for other_dir in Dir:
+                if self.dirs[self_dir] == other.dirs[other_dir]:
+                    self.edge_matches.append(Match(self.id, self_dir, other.id, other_dir, False))
+                    other.edge_matches.append(Match(other.id, other_dir, self.id, self_dir, False))
+                elif rvs == other.dirs[other_dir]:
+                    self.edge_matches.append(Match(self.id, self_dir, other.id, other_dir, True))
+                    other.edge_matches.append(Match(other.id, other_dir, self.id, self_dir, True))
 
 def a(lines):
     tiles = {}
@@ -137,65 +67,47 @@ def a(lines):
         tile = Tile.from_lines(lines[i:i+Tile.size+1])
         tiles[tile.id] = tile
         i += Tile.size + 2
-    
+
     tile_ids = list(tiles.keys())
     for i in range(len(tile_ids)):
         for j in range(i+1, len(tile_ids)):
-            get_matches(tiles[tile_ids[i]], tiles[tile_ids[j]])
-    
+            tiles[tile_ids[i]].edges_match(tiles[tile_ids[j]])
+
+    r = 1
     for tile in tiles.values():
-        x = tile.n_edges_matched()
-        if x < 10:
-            print(tile.id, x)
-
-def get_matches(x, y):
-    for x_state in Tile.state_combinations:
-        x.set_state(x_state)
-        for y_state in Tile.state_combinations:
-            y.set_state(y_state)
-            x.edges_match(y)
-            y.edges_match(x)
-
-"""
-Tile 2011:
-.##...#..#
-.#.#.#...#
-.......###
-.....##.#.
-#...#.....
-##...#...#
-#.#.#....#
-##..##....
-.....#.#..
-##.#......
-
-Tile 1021:
-##.#.###.#
-##....##..
-#......#..
-...#...#.#
-#.##.....#
-......#...
-#..#......
-.##...#...
-#...#...##
-.##...#..#
-
-Tile 2267:
-..##.#..##
-..#....#..
-#..#...#..
-.....##..#
-##..##.###
-#.#.....##
-#.#...##..
-#.......##
-..#.....##
-###.###.##
-"""
+        if len(tile.edge_matches) == 2:
+            r *= tile.id
+            print(tile.id, [str(match) for match in tile.edge_matches])
+    return r
 
 def b(lines):
     return
+
+"""
+Tile 2473:
+#....####.
+#..#.##...
+#.##..#...
+######.#.#
+.#...#.#.#
+.#########
+.###.#..#.
+########.#
+##...##.#.
+..###.#.#.
+
+Tile 3079:
+#.#.#####.
+.#..######
+..#.......
+######....
+####.#..#.
+.#...#.##.
+#.#####.##
+..#.###...
+..#.......
+..#.###...
+"""
 
 if __name__ == "__main__":
     with open("in", "r") as f:
