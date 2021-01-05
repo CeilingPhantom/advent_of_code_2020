@@ -1,5 +1,4 @@
 from enum import Enum
-from itertools import product
 
 """
 tile borders
@@ -201,43 +200,39 @@ class Tile:
         bot = list(lines[i])
         return cls(id, lines[1:], right, top, left, bot)
 
-    # check if an edge (reversed) is the same as an edge of another tile
+    # create Match if an edge is the same as an edge of another tile (not reversed or reversed)
+    # and set adjacent tiles accordingly
     def edges_match(self, other):
         # clear old match
         self.edge_matches = [match for match in self.edge_matches if match.id2 != other.id]
         other.edge_matches = [match for match in other.edge_matches if match.id2 != self.id]
         for self_dir in Dir:
+            # clear old matching adjacent tile
+            if self.adj_tiles[self_dir] == other.id:
+                self.adj_tiles[self_dir] = None
             rvs = self.borders[self_dir][:]
             rvs.reverse()
             for other_dir in Dir:
+                # clear old matching adjacent tile
+                if other.adj_tiles[other_dir] == self.id:
+                    other.adj_tiles[other_dir] = None
                 if self.borders[self_dir] == other.borders[other_dir]:
                     self.edge_matches.append(Match(self.id, self_dir, other.id, other_dir, False))
                     self.adj_tiles[self_dir] = other.id
                     other.edge_matches.append(Match(other.id, other_dir, self.id, self_dir, False))
                     other.adj_tiles[other_dir] = self.id
+                    return
                 elif rvs == other.borders[other_dir]:
                     self.edge_matches.append(Match(self.id, self_dir, other.id, other_dir, True))
                     self.adj_tiles[self_dir] = other.id
                     other.edge_matches.append(Match(other.id, other_dir, self.id, self_dir, True))
                     other.adj_tiles[other_dir] = self.id
+                    return
     
     def get_orientation(self):
         return (self.rotation, self.flipped_x, self.flipped_y)
-    
-    # important: rotation is done before flipping
-    def set_orientation(self, orientation):
-        rotation, flipped_x, flipped_y = orientation
-        rotation_amount = rotation - self.rotation
-        self.__rotate(rotation_amount)
-        if rotation_amount:
-            self.data_updated = False
-        if self.flipped_x != flipped_x:
-            self.data_updated = False
-            self.__flip_x()
-        if self.flipped_y != flipped_y:
-            self.data_updated = False
-            self.__flip_y()
 
+    # important: rotation is done before flipping
     def apply_orientation(self, orientation):
         rotation, flipped_x, flipped_y = orientation
         if rotation:
@@ -365,6 +360,14 @@ class Monster:
             for j in range(int(self.width/2)):
                 self.monster[i][j], self.monster[i][self.width-j-1] = self.monster[i][self.width-j-1], self.monster[i][j]
         return self
+    
+    # snippet must have same dimensions as monster
+    def in_snippet(self, snippet):
+        for i in range(self.height):
+            for j in range(self.width):
+                if self.monster[i][j] != " " and snippet[i][j] != self.monster[i][j] or snippet[i][j] == "O":
+                    return False
+        return True
 
 def a(lines):
     tiles = {}
@@ -399,63 +402,17 @@ def b(lines):
         for j in range(i+1, len(tile_ids)):
             tiles[tile_ids[i]].edges_match(tiles[tile_ids[j]])
 
-    corners = []
-    edges = []
-    other = []
+    # get any corner tile
+    corner = None
     for tile in tiles.values():
         n_matches = len(tile.edge_matches)
-        if n_matches == 2:
-            corners.append(tile)
-            #print("corner", tile.id, [str(match) for match in tile.edge_matches])
-        elif n_matches == 3:
-            edges.append(tile)
-            #print("edge", tile.id, [str(match) for match in tile.edge_matches])
-        else:
-            other.append(tile)
-            #print("body", tile.id, [str(match) for match in tile.edge_matches])
+        if n_matches == 2 and not corner:
+            corner = tile
+            break
 
-    print(len(corners), len(edges), len(other))
-    """
-    #for corner in corners:
-        #print(corner.id, corner.adj_tiles)
-    corner = corners[0]
-    # first happens to be top left
-    right = []
-    
-    i = 0
-
-    tile_id = corner.id
-    prev_tile = None
-    while tile_id:
-        right.append(tile_id)
-        tile = tiles[tile_id]
-
-        print("before", tile_id, tile.adj_tiles)
-
-        if prev_tile:
-            # rematch pair of tiles
-            tile.edges_match(prev_tile)
-            [match] = [m for m in prev_tile.edge_matches if m.id2 == tile.id]
-            print(str(match), Tile.determine_orientation_to_match(match), prev_tile.get_orientation())
-            tile.apply_orientation(Tile.determine_orientation_to_match(match))
-            print(tile.get_orientation())
-        
-        print("after", tile_id, tile.adj_tiles)
-        print("\n")
-        
-        prev_tile = tile
-        tile_id = tile.adj_tiles[Dir.Right]
-
-        i += 1
-        if i == 7:
-            print(right)
-            return
-
-    return
-    """
     top_left = None
     seen = set()
-    next_tiles = [corners[0]]
+    next_tiles = [corner]
     while next_tiles:
         tile = next_tiles.pop(0)
         if tile.id not in seen:
@@ -465,17 +422,14 @@ def b(lines):
                 top_left = tile.id
             for match in tile.edge_matches:
                 if match.id2 not in seen and len([1 for t in next_tiles if t.id == match.id2]) == 0:
-                    # rematch pair of tiles
+                    # rematch pair of tile and next_tile since tile has changed orientation
                     next_tile = tiles[match.id2]
                     next_tile.edges_match(tile)
                     [match] = [m for m in tile.edge_matches if m.id2 == next_tile.id]
                     next_tile.apply_orientation(Tile.determine_orientation_to_match(match))
                     next_tiles.append(next_tile)
 
-    print(len(seen))
-
-    i = 0
-
+    # organise tiles together
     img_tiles_data = []
     next_row_leftmost = top_left
     while next_row_leftmost:
@@ -484,17 +438,11 @@ def b(lines):
         next_right = next_row_leftmost
         next_row_leftmost = tiles[next_row_leftmost].adj_tiles[Dir.Bot]
         while next_right:
-            #print(f"{next_right} ", end="\n")
             tiles[next_right].update_data()
             row.append(tiles[next_right].data)
-            #print(f"{tiles[next_right].data}", end="")
             next_right = tiles[next_right].adj_tiles[Dir.Right]
-            if not next_right:
-                print(i)
-                i += 1
-        #print("\n")
     
-    # trim borders and combine tiles
+    # trim tile borders and stitch tiles together into an img
     img = []
     for i in range(len(img_tiles_data)):
         rows = [[] for _ in range(Tile.size - 2)]
@@ -510,7 +458,7 @@ def b(lines):
         for row in rows:
             img.append(row)
 
-    # rotate monster instead of img
+    # reorientate monster instead of img
     monster_orientations = []
     # 4 rotations (3 + current)
     for i in range(4):
@@ -528,9 +476,9 @@ def b(lines):
                 snippet = []
                 for k in range(m.height):
                     snippet.append(img[i+k][j:j+m.width])
-                if monster_equals_snippet(m, snippet):
+                if m.in_snippet(snippet):
                     n_monsters += 1
-                    # replace '#' with 'O'
+                    # replace '#' with 'O' in img
                     for k in range(m.height):
                         for l in range(m.width):
                             if m.monster[k][l] == "#":
@@ -538,21 +486,13 @@ def b(lines):
         if n_monsters:
             break
     
-    # count number of '#'
+    # count number of '#'; '#'s taken by monsters have become 'O's
     img_hash_count = 0
     for row in img:
         for c in row:
             img_hash_count += c == "#"
     
     return img_hash_count
-
-# snippet must have same dimensions as monster
-def monster_equals_snippet(monster, snippet):
-    for i in range(monster.height):
-        for j in range(monster.width):
-            if monster.monster[i][j] != " " and snippet[i][j] != monster.monster[i][j] or snippet[i][j] == "O":
-                return False
-    return True
 
 if __name__ == "__main__":
     with open("in", "r") as f:
