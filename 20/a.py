@@ -371,11 +371,9 @@ class Monster:
 
 def a(lines):
     tiles = {}
-    i = 0
-    while i < len(lines):
+    for i in range(0, len(lines), Tile.size+2):
         tile = Tile.from_lines(lines[i:i+Tile.size+1])
         tiles[tile.id] = tile
-        i += Tile.size + 2
 
     tile_ids = list(tiles.keys())
     for i in range(len(tile_ids)):
@@ -391,11 +389,9 @@ def a(lines):
 
 def b(lines):
     tiles = {}
-    i = 0
-    while i < len(lines):
+    for i in range(0, len(lines), Tile.size+2):
         tile = Tile.from_lines(lines[i:i+Tile.size+1])
         tiles[tile.id] = tile
-        i += Tile.size + 2
 
     tile_ids = list(tiles.keys())
     for i in range(len(tile_ids)):
@@ -444,17 +440,13 @@ def b(lines):
     
     # trim tile borders and stitch tiles together into an img
     img = []
-    for i in range(len(img_tiles_data)):
+    for img_tiles_data_row in img_tiles_data:
         rows = [[] for _ in range(Tile.size - 2)]
-        for j in range(len(img_tiles_data[i])):
-            tile_data = img_tiles_data[i][j][1:-1]
-            # remove side borders
-            for k in range(len(tile_data)):
-                tile_data[k].pop(0)
-                tile_data[k].pop(-1)
+        for img_tiles_data_cell in img_tiles_data_row:
+            tile_data = [tile_data_row[1:-1] for tile_data_row in img_tiles_data_cell[1:-1]]
             # add to rows list
-            for k in range(len(rows)):
-                rows[k] += tile_data[k]
+            for k, tile_data_row in enumerate(tile_data):
+                rows[k] += tile_data_row
         for row in rows:
             img.append(row)
 
@@ -479,9 +471,9 @@ def b(lines):
                 if m.in_snippet(snippet):
                     n_monsters += 1
                     # replace '#' with 'O' in img
-                    for k in range(m.height):
-                        for l in range(m.width):
-                            if m.monster[k][l] == "#":
+                    for k, m_row in enumerate(m.monster):
+                        for l, m_c in enumerate(m_row):
+                            if m_c == "#":
                                 img[i+k][j+l] = "O"
         if n_monsters:
             break
