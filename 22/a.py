@@ -54,7 +54,8 @@ def play_game(player1, player2):
         # assuming root game doesn't get infinite rounds
         round_config = (tuple(player1), tuple(player2))
         if round_config in round_configs:
-            return player1, []
+            player2 = []
+            break
         round_configs.add(round_config)
         card1 = player1.pop(0)
         card2 = player2.pop(0)
