@@ -73,7 +73,7 @@ rounds_b = 10000000
 max_val_b = 1000000
 
 def b(lines):
-    # linked list of cups
+    # "linked" list of cup to next cup
     cups_next = [i+1 for i in range(0, max_val_b+1)]
     cups_input = [int(x) for x in lines[0]]
     for i, cup in enumerate(cups_input[:-1]):
